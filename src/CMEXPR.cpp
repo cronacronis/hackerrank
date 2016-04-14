@@ -36,198 +36,251 @@ using boost::regex;
 using boost::regex_search;
 using boost::basic_regex;
 
-string binary_op_regex = "(\\({1}.*\\){1}|[a-z])(\\+*\\-*\\**\\\\*)(\\({1}.*\\){1}|[a-z])";
 
+enum class ExprType {
+	Container,
+	Brackets, /*  */
+	Constant, /* represents letters */
+	Operator, /* + - * / */
+	Empty
+};
 
-/**
- * Try to parse first occurence of reg_exp
- * */
-bool tryOutputFirstGroup(const string& input_, const string& reg_exp, string& output)
+std::ostream& operator << (std::ostream& os, const ExprType& obj)
 {
-	regex expr(reg_exp);
-	smatch match;
-	if(regex_search(input_, match, expr))
+   os << static_cast<std::underlying_type<ExprType>::type>(obj);
+   return os;
+}
+
+void wrapin_brackets(string& str)
+{
+	str += ")";
+	str.insert (0, 1, '(');
+}
+
+struct ExprContainer
+{
+	ExprType type;
+	string str;
+	vector<shared_ptr<ExprContainer>> children;
+
+	/* This variable wraps children in brackets*/
+	bool is_extract_with_brackets = false;
+
+	ExprContainer(ExprType type_, const string str_) : type(type_), str(str_) {};
+
+	ExprContainer(string str = "") : ExprContainer(ExprType::Container, str) {};
+
+	void addChild(shared_ptr<ExprContainer>& chld_ptr)
 	{
-		if(match.size() > 1){
-			output = match[1];
-			return true;
+		children.emplace_back(chld_ptr);
+	}
+	shared_ptr<ExprContainer> addChild(ExprType type_, string str_)
+	{
+		shared_ptr<ExprContainer> chld = make_shared<ExprContainer>(type_, str_);
+		children.emplace_back(chld);
+		return(chld);
+	}
+
+	void addChild(ExprType type_, const char& chr_)
+	{
+		addChild(type_, string(1, chr_));
+	}
+
+	void print(int print_offset_ = 0, int child_offset_ = 2)
+	{
+		string offset = std::string(print_offset_, ' ');
+		cout << offset << this->type << " : " << str << "." << endl;
+		for (auto& p : children)
+			p->print(print_offset_ + child_offset_);
+	}
+
+	void removeBrackets()
+	{
+		if(this->type == ExprType::Brackets)
+		{
+			str.pop_back();
+			str.erase(str.begin());
+		} else {
+			throw std::logic_error("Brackets can be only removed for brackets container");
 		}
 	}
-	return false;
-}
 
-/**
- * Parses only one occurence
- * */
-bool recursiveUnaryApply(const string& input_, const string& reg_exp, string& output)
-{
-	string tmp_output = input_;
-	bool has_changed = false;
-	while(tryOutputFirstGroup(tmp_output, reg_exp, tmp_output))
+	bool hasChildren()
 	{
-		has_changed = true;
+//		return children.size() > 1;
+		return !children.empty();
 	}
-	if(has_changed) output = tmp_output;
-	return(has_changed);
-}
 
-bool removeSideBrackets(const string& input_, string& output, bool keep_one_ = false)
-{
-//	string brackets_regex = (keep_one_ == true) ? "^\\({2}(.*)\\){2}$" : "^\\({1}(.*)\\){1}$";
-	string brackets_regex = "^\\({1}(.*)\\){1}$";
-	bool successful = (recursiveUnaryApply(input_, brackets_regex, output)) ? true : false;
-	return successful;
-}
-
-void removeBrackets(const string& input_, string& output, bool keep_one_ = false)
-{
-	if(removeSideBrackets(input_, output, keep_one_))
+	string extract()
 	{
-		;
-	} else {
-		output = input_;
-	}
-}
-
-struct ParseTree
-{
-	string opr;
-	string unparsed_content;
-	string parsed_content;
-
-	shared_ptr<ParseTree> left;
-	shared_ptr<ParseTree> right;
-
-
-	/**
-	 * Initialization of parser
-	 * */
-	ParseTree(const string& unparsed_content) : unparsed_content(unparsed_content) {};
-
-
-	inline bool isBracketNeeded(const string& opr)
-	{
-		if( opr == "+" || opr == "-")
+		string extract;
+		if(!hasChildren())
 		{
-			return false;
-		} else return true;
-
-	}
-
-	void parseSelf()
-	{
-		string unparsed_wo_brackets;
-		removeBrackets(unparsed_content, unparsed_wo_brackets);
-		vector<string> triple = parse(unparsed_wo_brackets, binary_op_regex);
-//		triple.shrink_to_fit();
-		/*DEBUG*/
-		cout << unparsed_wo_brackets << endl;
-//		cout << triple.size() << endl;
-//		for( auto t : triple)
-//			cout<< t << " "<<endl;
-		/* END DEBUG */
-		if(triple.size() != 3 )
-		{
-			throw std::invalid_argument("Cannot parse tree");
-			std::terminate();
+			return str;
 		}
-
-		opr = triple[1];
-
-
-		bool needBracket = isBracketNeeded(opr);
-
-		removeBrackets(triple[0], triple[0], needBracket);
-		removeBrackets(triple[2], triple[2], needBracket);
-
-		left = make_shared<ParseTree>(ParseTree(triple[0]));
-		right = make_shared<ParseTree>(ParseTree(triple[2]));
-	}
-
-	static vector<string> parse(const string& input_, const string& reg_exp)
-	{
-		regex expr(reg_exp);
-
-		vector<string> groups;
-		groups.reserve(3);
-
-		smatch match;
-		if(regex_search(input_, match, expr))
-		{
-			for(unsigned i = 1; i <= match.size(); i++)
+		else{
+			if(is_extract_with_brackets) extract += '(';
+			for (const auto& p : children)
 			{
-				/*DEBUG*/
-				cout << "DEBUG: {" << match[i] << "}" << endl;
-				if(match[i] != "")/*Sometimes regex_search shows empty string as a groupped match*/
-				{
-					groups.emplace_back(match[i]);
-				}
+				extract += p->extract();
 			}
+			if(is_extract_with_brackets) extract += ')';
 		}
-		return groups;
+		return extract;
 	}
 
-	void print()
-	{
-		 cout << unparsed_content << " -> " << left->unparsed_content << "{" << opr << "}"<< right->unparsed_content  << endl ;
-	}
 
 };
 
+/*
+ * Iterator -> (ExprContainer, Iterator) ->
+ * */
+
+
+/* we proceed with tail and fill cont, if we find new cont   */
+string get_between_brackets(string::iterator& tail_, const string::iterator& end_)
+{
+	string brackets_content;
+	if( (end_ - tail_) >= 2)
+	{
+		uint br_cnt = 0;
+		while(tail_ != end_)
+		{
+			const auto& chr = *tail_;
+			switch(chr)
+			{
+				case '(': br_cnt++; break;
+				case ')': br_cnt--; break;
+			}
+			if(br_cnt >= 0)
+				brackets_content.push_back(chr);
+
+			if (br_cnt == 0)
+			{
+				break;
+			}
+			++tail_;
+		}
+	} else throw std::invalid_argument("brackets tail is not long enough");
+	return brackets_content;
+}
+
+inline bool is_bracket(const char& chr)
+{
+	return (chr == '(' || chr == ')');
+}
+
+inline bool is_operator(const char& chr)
+{
+	return (chr == '*' || chr == '+' || chr == '/' || chr == '-');
+}
+
+/* As soon as we hit one of the keywords, we create new container and pass it to fillContainer
+ * while container is being filled function moves iterator further; if within tail new structures
+ * are found their will be appended inside `str` of `cont`;
+ * */
+void parse_string(ExprContainer& cont_)
+{
+	string::iterator start = cont_.str.begin();
+	const string::iterator& end = cont_.str.end();
+
+	for(auto& it = start; it != end; ++it)
+	{
+		const auto& cur_chr = *it;
+//		cout << "DEBUG:" << cur_chr << endl;
+		if(isspace(cur_chr))
+		{
+			cout << "DEBUG parse_string: found space"<< endl;
+			continue;
+		} else if(isalpha(cur_chr))
+		{
+			cout << "DEBUG parse_string: found alpha: " << cur_chr << endl;
+			cont_.addChild(ExprType::Constant, cur_chr);
+		} else if (is_operator(cur_chr))
+		{
+			cout << "DEBUG parse_string: found operator: " << cur_chr << endl;
+			cont_.addChild(ExprType::Operator, cur_chr);
+		} else if (is_bracket(cur_chr))
+		{
+			cout << "DEBUG parse_string: found bracket: " << cur_chr << endl;
+			auto txt_in_brackets = get_between_brackets(it, end);
+			shared_ptr<ExprContainer> bracketsCont = make_shared<ExprContainer>(ExprType::Brackets, txt_in_brackets);
+			bracketsCont->removeBrackets();
+			parse_string(*bracketsCont);
+			if(!bracketsCont->hasChildren())
+			{
+				cont_.addChild(ExprType::Empty, "");
+			}
+			else
+			{
+				cont_.addChild(bracketsCont);
+			}
+		}
+	}
+}
+
+
+void put_brackets(ExprContainer& input_cont_)
+{
+	for(auto it = input_cont_.children.begin(); it != input_cont_.children.end(); ++it)
+	{
+		ExprContainer& chld = **it;
+		if(chld.hasChildren())
+		{
+			put_brackets(chld);
+		} else {
+
+			cout << "DEBUG put_brackets: chld = " << chld.str << endl;
+
+			if(chld.type == ExprType::Operator)
+			{
+				string& op = chld.str;
+				if(op == "*" || op == "/")
+				{
+					auto& prev_chld = **(it-1);
+					auto& next_chld = **(it+1);//TODO check that expression is correct? Might be reaching end to soon
+					prev_chld.is_extract_with_brackets = true;
+					next_chld.is_extract_with_brackets = true;
+				} else if (op == "-")
+				{
+					auto& next_chld = **(it+1);
+					next_chld.is_extract_with_brackets = true;
+				}
+			}
+		}
+
+	}
+}
+
 int main()
 {
-//	string tst = "(((a+b)))";
-//	string parsed;
-//	if(removeSideBrackets(tst, parsed))
-//		cout << tst << " -> "<< parsed << endl;
-//	else
-//		cout << "not found" << endl;
 
-//	string parsed1;
-//	removeBrackets(tst, parsed1);
-//	cout << parsed1 << endl;
-
-//	string tst2 = "(a+b)+c";
-//	string reg_ex = "(\\({1}.*\\){1}|[a-z])(\\+*\\-*\\**\\\\*)(\\({1}.*\\){1}|[a-z])";
-//	vector<string> parsed2 = ParseTree::parse(tst2, reg_ex);
-//	cout << tst2 << " -> ";
-//	for(auto& p : parsed2) cout << "{" << p << "}" ;
-//	cout << endl;
-
-//	terminate called after throwing an instance of
-//	'boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::regex_error> >'
-//	  what():  Found a closing repetition operator } with no corresponding {.
-//
-//		  The error occurred while parsing the regular expression fragment: ']+|(?R))*)>>>HERE>>>}'.
-
-//	string tst2 = "(a+b)+(c)";
-//	string reg_ex = "\\(((?>[^\\(\\)]+|(?R))*)\\)";
-//	vector<string> parsed2 = ParseTree::parse(tst2, reg_ex);
-//	cout << tst2 << " -> ";
-//	for(auto& p : parsed2) cout << "{" << p << "}" ;
-//	cout << endl;
+//	string tst = "(a+(b*c))";
+//	string tst = "((a+b)*c)
+//	string tst = "(a*(b*c))";
+	string tst = "(a*(b/c)*d)";
+//	string tst = "((a/(b/c))/d)";
+//	string tst = "((x))";
+//	string tst = "(a+b)-(c-d)-(e/f)";
+//	string tst = "(a+b)+(c-d)-(e+f)";
 
 
-////	auto pt = ParseTree("((a+b)+c)"); //((a+b)+c) -> a+b{+}c
-//	auto pt = ParseTree("(a+b)+(c)");
-//	pt.parseSelf();
-//	pt.print();
+//	string tst = "(d*((f+g)))";
+//	string tst = "d*(f+g)";
+//	string tst = "(a+b)+(c)+d*(f+g)";
+//	string tst = "(a+b+(b+g)+(g*t*(k+b))+ ())";
+//	wrapin_brackets(tst);
+
+	cout << tst << endl;
+
+	ExprContainer top(tst);
+	parse_string(top);
+	top.print();
+
+	put_brackets(top);
+	string extract = top.extract();
+
+	cout << extract << endl;
 
 	return 0;
 }
-
-//(\((?:\1??[^\(]*?\)))+
-
-
-
-//#include <string>
-//#include <iostream>
-//
-//int main()
-//{
-//  std::string s = "Boost Libraries";
-//  boost::regex expr{"\\w+\\s\\w+"};
-//  std::cout << std::boolalpha << boost::regex_match(s, expr) << '\n';
-//}
-
-
