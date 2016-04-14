@@ -26,7 +26,7 @@
 using namespace std;
 
 
-int main(){
+int main_solved(){
     int n;
     cin >> n;
     vector<int> arr(n);
