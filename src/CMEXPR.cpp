@@ -39,6 +39,7 @@ using std::shared_ptr;
 using std::make_shared;
 
 
+//#include <gperftools/profiler.h>
 //using boost::smatch;
 //using boost::regex;
 //using boost::regex_search;
@@ -69,7 +70,7 @@ enum class OpType {
 std::ostream& operator << (std::ostream& os, const ExprType& obj)
 {
    os << static_cast<std::underlying_type<ExprType>::type>(obj);
-   return os;
+   return(os);
 }
 
 std::ostream& operator << (std::ostream& os, const OpType& obj)
@@ -110,16 +111,6 @@ string get_between_brackets(string::iterator& tail_, const string::iterator& end
 		}
 	} else throw std::invalid_argument("brackets tail is not long enough");
 	return brackets_content;
-}
-
-inline bool is_bracket(const char& chr)
-{
-	return (chr == '(' || chr == ')');
-}
-
-inline bool is_operator(const char& chr)
-{
-	return (chr == '*' || chr == '+' || chr == '/' || chr == '-');
 }
 
 struct ExprContainer
@@ -206,7 +197,7 @@ struct ExprContainer
 	{
 		if(isset_operator_inside)
 		{
-			return this->operator_inside;
+			return(this->operator_inside);
 		} else if(hasChildren()) {
 			OpType max_op_type = this->operator_type;
 			for(auto& chld : children)
@@ -217,9 +208,9 @@ struct ExprContainer
 			}
 			this->operator_inside = max_op_type;
 			this->isset_operator_inside = true;
-			return max_op_type;
+			return(max_op_type);
 		} else {
-			return this->operator_type;
+			return(this->operator_type);
 		}
 	}
 
@@ -228,7 +219,7 @@ struct ExprContainer
 		string extract;
 		if(!hasChildren())
 		{
-			return str;
+			return(str);
 		}
 		else{
 			bool with_brackets = this->extr_brackets;
@@ -239,19 +230,26 @@ struct ExprContainer
 			}
 			if(with_brackets) extract += ')';
 		}
-		return extract;
+		return(extract);
 	}
 
 
 };
+//////////////////////////////////////////////////
+inline bool is_bracket(const char& chr)
+{
+	return (chr == '(' || chr == ')');
+}
+
+inline bool is_operator(const char& chr)
+{
+	return (chr == '*' || chr == '+' || chr == '/' || chr == '-');
+}
 
 void parse_string(ExprContainer& cont_)
 {
 	string::iterator start = cont_.str.begin();
 	const string::iterator& end = cont_.str.end();
-
-
-
 	for(auto& it = start; it != end; ++it)
 	{
 		const auto& cur_chr = *it;
@@ -285,22 +283,23 @@ void parse_string(ExprContainer& cont_)
 			}
 		}
 	}
+	cont_.str.erase(cont_.str.begin(), cont_.str.end());
 }
-
+//////////////////////////////////////////////////
 /*                       +  -  *  /    */
 int left_prios[5]  = {0, 3, 3, 4, 7};
 int opr_prios[5]   = {0, 2, 3, 4, 7};
 int right_prios[5] = {0, 2, 2, 4, 5};
 
-int opr_prio(OpType operat)
+inline int opr_prio(OpType operat)
 {
 	return(opr_prios[(int)operat]);
 }
-int left_prio(OpType operand)
+inline int left_prio(OpType operand)
 {
 	return(left_prios[(int)operand]);
 }
-int right_prio(OpType operand)
+inline int right_prio(OpType operand)
 {
 	return(right_prios[(int)operand]);
 }
@@ -317,14 +316,11 @@ which_to_wrap(OpType opr, OpType left, OpType right)
 	if(opr_pr > right_prio(right)) {
 		towrapright = true;
 	}
-	return std::make_tuple(towrapleft, towrapright);
+	return(std::make_tuple(towrapleft, towrapright));
 }
 
 void mark_brackets(ExprContainer& input_cont_)
 {
-//	auto opr_it = find_type(input_cont_, ExprType::Operator);
-//	auto found_operators_its = find_type_all(input_cont_, ExprType::Operator);
-//	for(auto& opr_it : found_operators_its)
 	for(auto opr_it = input_cont_.children.begin(); opr_it !=  input_cont_.children.end(); ++opr_it)
 	{
 		ExprContainer& curr_opr = (**opr_it);
@@ -344,18 +340,22 @@ void mark_brackets(ExprContainer& input_cont_)
 			if(right_brackets == true) next_chld.setBrackets();
 		}
 	}
-	/* If found operator inside current */
-//	for(auto& chld : input_cont_.children) mark_brackets((*chld));
 }
 
+string remove_excess_brackets(string str)
+{
+	ExprContainer top(str);
+	parse_string(top);
+	mark_brackets(top);
+	string extract = top.extract();
+	return(extract);
+}
 
 bool test(string tst, string expect, bool verbose_ = true)
 {
 	ExprContainer top(tst);
 	parse_string(top);
-
 	mark_brackets(top);
-
 	string extract = top.extract();
 	if(verbose_)
 	{
@@ -364,50 +364,49 @@ bool test(string tst, string expect, bool verbose_ = true)
 	}
 	bool passed = expect == extract;
 	if(!passed) cout << "must be " <<  expect << endl;
-	return passed;
+	return(passed);
 }
 
 int main()
 {
 
-//	string tst = "(a+(b*c))";
-//	string tst = "((a+b)*c)";
-//	string tst = "(a*(b*c))";
-//	string tst = "(a*(b/c)*d)";
-//	string tst = "((a/(b/c))/d)";
-//	string tst = "((x))";
-//	string tst = "(a+b)-(c-d)-(e/f)";
-//	string tst = "(a+b)+(c-d)-(e+f)";
+//    ProfilerStart("/home/cracs/CMEXPR.txt");
 
+//    for(int i = 0; i < 10000; i++)
+//    {
+//    	test("(a+(b*c))"	, "a+b*c", false);
+//    	test("((a+b)*c)"	, "(a+b)*c", false);
+//    	test("(a*(b*c))"	, "a*b*c", false);
+//    	test("(a*(b/c)*d)"	, "a*b/c*d", false);
+//    	test("((a/(b/c))/d)"	, "a/(b/c)/d", false);
+//    	test("((x))"	, "x", false);
+//    	test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false);
+//    	test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false);
+////    	cout << test("(a+(b*c))"	, "a+b*c", false) << endl;
+////    	cout << test("((a+b)*c)"	, "(a+b)*c", false) << endl;
+////    	cout << test("(a*(b*c))"	, "a*b*c", false) << endl;
+////    	cout << test("(a*(b/c)*d)"	, "a*b/c*d", false) << endl;
+////    	cout << test("((a/(b/c))/d)"	, "a/(b/c)/d", false) << endl;
+////    	cout << test("((x))"	, "x", false) << endl;
+////    	cout << test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false) << endl;
+////    	cout << test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false) << endl;
+//    }
 
-//	string tst = "(d*((f+g)))";
-//	string tst = "d*(f+g)";
-//	string tst = "(a+b)+(c)+d*(f+g)";
-//	string tst = "(a+b+(b+g)+(g*t*(k+b))+ ())";
-//	wrapin_brackets(tst);
+	int num_of_expr;
+	std::cin >> num_of_expr;
+	vector<string> unparsed(num_of_expr);
+	for(int i = 0; i < num_of_expr; i++)
+	{
+		std::cin >> unparsed[i];
 
+	}
+	for(auto& unpr : unparsed)
+		cout << remove_excess_brackets(unpr) << endl;
 
-//	string tst = "(a+(b*c))";
-//	cout << tst << endl;
-//	ExprContainer top(tst);s
-//	parse_string(top);
-//	mark_operated_by(top);
-//	top.getAndSetIntPrio();
-//	string extract = top.extract();
-//	cout << extract << endl;
-//	top.print();
+//    ProfilerFlush();
+//    ProfilerStop();
 
-
-	cout << test("(a+(b*c))"	, "a+b*c", false) << endl;
-	cout << test("((a+b)*c)"	, "(a+b)*c", false) << endl;
-	cout << test("(a*(b*c))"	, "a*b*c", false) << endl;
-	cout << test("(a*(b/c)*d)"	, "a*b/c*d", false) << endl;
-	cout << test("((a/(b/c))/d)"	, "a/(b/c)/d", false) << endl;
-	cout << test("((x))"	, "x", false) << endl;
-	cout << test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", true) << endl;
-	cout << test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", true) << endl;
-
-	return 0;
+	return(0);
 }
 
 
