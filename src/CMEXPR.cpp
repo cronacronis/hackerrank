@@ -14,9 +14,6 @@
  *
  * */
 
-
-//#include <boost/tr1/regex.hpp>
-
 #include <iterator>
 #include <algorithm>
 #include <iostream>
@@ -25,12 +22,6 @@
 #include <map>
 #include <memory>
 
-//using namespace boost;
-//using boo
-
-//#include <boost/xpressive/xpressive.hpp>
-
-//using namespace std;
 using std::string;
 using std::vector;
 using std::cout;
@@ -39,18 +30,11 @@ using std::shared_ptr;
 using std::make_shared;
 
 
-//#include <gperftools/profiler.h>
-//using boost::smatch;
-//using boost::regex;
-//using boost::regex_search;
-//using boost::basic_regex;
-
-
 enum class ExprType {
 	Container,
-	Brackets, /*  */
-	Constant, /* represents letters */
-	Operator, /* + - * / */
+	Brackets,
+	Constant,
+	Operator,
 	Empty
 };
 
@@ -76,7 +60,7 @@ std::ostream& operator << (std::ostream& os, const ExprType& obj)
 std::ostream& operator << (std::ostream& os, const OpType& obj)
 {
    os << static_cast<std::underlying_type<OpType>::type>(obj);
-   return os;
+   return(os);
 }
 
 void wrapin_brackets(string& str)
@@ -110,7 +94,7 @@ string get_between_brackets(string::iterator& tail_, const string::iterator& end
 			++tail_;
 		}
 	} else throw std::invalid_argument("brackets tail is not long enough");
-	return brackets_content;
+	return(brackets_content);
 }
 
 struct ExprContainer
@@ -166,16 +150,6 @@ struct ExprContainer
 			this->extr_brackets = true;
 	}
 
-	void print(int print_offset_ = 0, int child_offset_ = 2)
-	{
-		string offset = std::string(print_offset_, ' ');
-		cout << "DEBUG: " << offset <<
-//				this->type << " : " << str << endl;
-				this->type << " : " << str << " op "<< opTypeInside() << " br " << this->extr_brackets << endl;
-		for (auto& p : children)
-			p->print(print_offset_ + child_offset_);
-	}
-
 	void removeBrackets()
 	{
 		if(this->type == ExprType::Brackets)
@@ -189,7 +163,7 @@ struct ExprContainer
 
 	bool hasChildren()
 	{
-		return !children.empty();
+		return(!children.empty());
 	}
 
 	/* return operation inside the container or operation of itself*/
@@ -253,22 +227,17 @@ void parse_string(ExprContainer& cont_)
 	for(auto& it = start; it != end; ++it)
 	{
 		const auto& cur_chr = *it;
-//		cout << "DEBUG:" << cur_chr << endl;
 		if(isspace(cur_chr))
 		{
-//			cout << "DEBUG parse_string: found space"<< endl;
 			continue;
 		} else if(isalpha(cur_chr))
 		{
-//			cout << "DEBUG parse_string: found alpha: " << cur_chr << endl;
 			cont_.addChild(ExprType::Constant, cur_chr);
 		} else if (is_operator(cur_chr))
 		{
-//			cout << "DEBUG parse_string: found operator: " << cur_chr << endl;
 			cont_.addChild(ExprType::Operator, cur_chr);
 		} else if (is_bracket(cur_chr))
 		{
-//			cout << "DEBUG parse_string: found bracket: " << cur_chr << endl;
 			auto txt_in_brackets = get_between_brackets(it, end);
 			shared_ptr<ExprContainer> bracketsCont = make_shared<ExprContainer>(ExprType::Brackets, txt_in_brackets);
 			bracketsCont->removeBrackets();
@@ -330,7 +299,6 @@ void mark_brackets(ExprContainer& input_cont_)
 		} else if (curr_opr.type == ExprType::Operator) {
 			auto& prev_chld = **(opr_it-1);
 			auto& next_chld = **(opr_it+1);
-//			cout<< "DEBUG: " << prev_chld.str << " ... " << next_chld.str << endl;
 			OpType left = prev_chld.opTypeInside();
 			OpType right = next_chld.opTypeInside();
 			bool left_brackets = false;
@@ -351,47 +319,8 @@ string remove_excess_brackets(string str)
 	return(extract);
 }
 
-bool test(string tst, string expect, bool verbose_ = true)
-{
-	ExprContainer top(tst);
-	parse_string(top);
-	mark_brackets(top);
-	string extract = top.extract();
-	if(verbose_)
-	{
-		top.print();
-		cout << tst << " -> " << extract << endl;
-	}
-	bool passed = expect == extract;
-	if(!passed) cout << "must be " <<  expect << endl;
-	return(passed);
-}
-
 int main()
 {
-
-//    ProfilerStart("/home/cracs/CMEXPR.txt");
-
-//    for(int i = 0; i < 10000; i++)
-//    {
-//    	test("(a+(b*c))"	, "a+b*c", false);
-//    	test("((a+b)*c)"	, "(a+b)*c", false);
-//    	test("(a*(b*c))"	, "a*b*c", false);
-//    	test("(a*(b/c)*d)"	, "a*b/c*d", false);
-//    	test("((a/(b/c))/d)"	, "a/(b/c)/d", false);
-//    	test("((x))"	, "x", false);
-//    	test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false);
-//    	test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false);
-////    	cout << test("(a+(b*c))"	, "a+b*c", false) << endl;
-////    	cout << test("((a+b)*c)"	, "(a+b)*c", false) << endl;
-////    	cout << test("(a*(b*c))"	, "a*b*c", false) << endl;
-////    	cout << test("(a*(b/c)*d)"	, "a*b/c*d", false) << endl;
-////    	cout << test("((a/(b/c))/d)"	, "a/(b/c)/d", false) << endl;
-////    	cout << test("((x))"	, "x", false) << endl;
-////    	cout << test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false) << endl;
-////    	cout << test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false) << endl;
-//    }
-
 	int num_of_expr;
 	std::cin >> num_of_expr;
 	vector<string> unparsed(num_of_expr);
@@ -403,56 +332,6 @@ int main()
 	for(auto& unpr : unparsed)
 		cout << remove_excess_brackets(unpr) << endl;
 
-//    ProfilerFlush();
-//    ProfilerStop();
-
 	return(0);
 }
 
-
-
-//typedef vector<shared_ptr<ExprContainer>>::iterator ChldIter;
-//
-//
-//ChldIter
-//find_type(ExprContainer& input_cont_, ExprType type_)
-//{
-//	auto fn_has_oper = [&type_](const shared_ptr<ExprContainer>&  chld){
-//		return (*chld).type == type_;
-//	};
-//
-//	auto found = std::find_if(input_cont_.children.begin(), input_cont_.children.end(), fn_has_oper);
-//	return found;
-//}
-//
-//
-//ChldIter
-//find_type(ChldIter begin, ChldIter end, ExprType type_)
-//{
-//	auto fn_has_oper = [&type_](const shared_ptr<ExprContainer>&  chld){
-//		return (*chld).type == type_;
-//	};
-//	auto found = std::find_if(begin, end, fn_has_oper);
-//	return found;
-//}
-//
-//
-//vector<ChldIter>
-//find_type_all(ExprContainer& input_cont_, ExprType type_)
-//{
-//	auto begin = input_cont_.children.begin();
-//	const auto& end = input_cont_.children.end();
-//	vector<ChldIter> found_iters;
-//	for(;;)
-//	{
-//		auto found = find_type(begin, end, type_);
-//		if(found == input_cont_.children.end())
-//		{
-//			break;
-//		} else {
-//			found_iters.emplace_back(found);
-//			++begin;
-//		}
-//	}
-//	return found_iters;
-//}
