@@ -289,8 +289,8 @@ void parse_string(ExprContainer& cont_)
 
 /*                       +  -  *  /    */
 int left_prios[5]  = {0, 3, 3, 4, 7};
-int opr_prios[5]   = {0, 3, 3, 4, 7};
-int right_prios[5] = {0, 3, 2, 4, 5};
+int opr_prios[5]   = {0, 2, 3, 4, 7};
+int right_prios[5] = {0, 2, 2, 4, 5};
 
 int opr_prio(OpType operat)
 {
