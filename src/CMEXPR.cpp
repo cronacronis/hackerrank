@@ -29,6 +29,11 @@ using std::endl;
 using std::shared_ptr;
 using std::make_shared;
 
+using std::distance;
+using std::advance;
+using std::prev;
+using std::next;
+
 
 enum class ExprType {
 	Container,
@@ -37,8 +42,6 @@ enum class ExprType {
 	Operator,
 	Empty
 };
-
-
 /*
  * For example, subtraction and division, as used in conventional math notation, are inherently left-associative.
  * Addition and multiplication, by contrast, are both left and right associative.
@@ -50,19 +53,18 @@ enum class OpType {
 	Product = 3,
 	Div = 4
 };
-
 std::ostream& operator << (std::ostream& os, const ExprType& obj)
 {
    os << static_cast<std::underlying_type<ExprType>::type>(obj);
    return(os);
 }
-
 std::ostream& operator << (std::ostream& os, const OpType& obj)
 {
    os << static_cast<std::underlying_type<OpType>::type>(obj);
    return(os);
 }
 
+/* Misc functions*/
 void wrapin_brackets(string& str)
 {
 	str += ")";
@@ -73,7 +75,7 @@ void wrapin_brackets(string& str)
 string get_between_brackets(string::iterator& tail_, const string::iterator& end_)
 {
 	string brackets_content;
-	if( (end_ - tail_) >= 2)
+	if(distance(tail_, end_) >= 2)
 	{
 		uint br_cnt = 0;
 		while(tail_ != end_)
@@ -91,43 +93,41 @@ string get_between_brackets(string::iterator& tail_, const string::iterator& end
 			{
 				break;
 			}
-			++tail_;
+			advance(tail_, 1);
 		}
 	} else throw std::invalid_argument("brackets tail is not long enough");
 	return(brackets_content);
 }
-
+inline bool is_operator(const char& chr)
+{
+	return (chr == '*' || chr == '+' || chr == '/' || chr == '-');
+}
 struct ExprContainer
 {
 	ExprType type;
 	string str;
 	vector<shared_ptr<ExprContainer>> children;
-
 	/* This variable wraps children in brackets*/
 	bool extr_brackets = false;
-
 	OpType operator_type = OpType::NA;
-
 	bool isset_operator_inside = false;
 	OpType operator_inside = operator_type;
-
-
+	/* CONSTRUCTORS */
 	ExprContainer(ExprType type_, const string str_) : type(type_), str(str_) {
 		if(type_ == ExprType::Operator)
 		{
-			switch(this->str.front())
+			switch(str_.front())
 			{
 				case '+': this->operator_type = OpType::Sum; break;
-				case '-': this->operator_type =  OpType::Minus; break;
-				case '*': this->operator_type =  OpType::Product; break;
-				case '/': this->operator_type =  OpType::Div; break;
+				case '-': this->operator_type = OpType::Minus; break;
+				case '*': this->operator_type = OpType::Product; break;
+				case '/': this->operator_type = OpType::Div; break;
 				throw std::invalid_argument("input is not an operator");
 			}
 		}
 	};
-
 	ExprContainer(string str = "") : ExprContainer(ExprType::Container, str) {};
-
+	/* Adding children */
 	void addChild(shared_ptr<ExprContainer>& chld_ptr)
 	{
 		children.emplace_back(chld_ptr);
@@ -138,64 +138,83 @@ struct ExprContainer
 		children.emplace_back(chld);
 		return(chld);
 	}
-
 	void addChild(ExprType type_, const char& chr_)
 	{
 		addChild(type_, string(1, chr_));
 	}
-
-	void setBrackets()
-	{
-		if(this->extr_brackets == false)
-			this->extr_brackets = true;
-	}
-
-	void removeBrackets()
-	{
-		if(this->type == ExprType::Brackets)
-		{
-			str.pop_back();
-			str.erase(str.begin());
-		} else {
-			throw std::logic_error("Brackets can be only removed for brackets container");
-		}
-	}
-
 	bool hasChildren()
 	{
 		return(!children.empty());
 	}
-
 	/* return operation inside the container or operation of itself*/
 	OpType opTypeInside()
 	{
-		if(isset_operator_inside)
+		if(this->isset_operator_inside)
 		{
 			return(this->operator_inside);
 		} else if(hasChildren()) {
-			OpType max_op_type = this->operator_type;
+			OpType min_op_type = OpType::NA;
+			/* Scan all childern and find minimim operator from all included, but bigger than NA*/
 			for(auto& chld : children)
 			{
 				ExprContainer& chldref = (*chld);
 				auto op_type = chldref.opTypeInside();
-				if(op_type > max_op_type) max_op_type = op_type;
+				if(op_type == OpType::NA)
+				{
+					continue;
+				} else if(min_op_type == OpType::NA || op_type < min_op_type){
+					min_op_type = op_type;
+				}
 			}
-			this->operator_inside = max_op_type;
+			this->operator_inside = min_op_type;
 			this->isset_operator_inside = true;
-			return(max_op_type);
+			return(min_op_type);
 		} else {
 			return(this->operator_type);
 		}
 	}
+	/* Brackets related */
+	void setBrackets()
+	{
+		if(this->type == ExprType::Brackets && children.size() == 1)
+		{
+			;
+		} else {
+			this->extr_brackets = true;
+		}
+	}
+	void removeBrackets()
+	{
+		if(this->type == ExprType::Brackets)
+		{
+			auto detect_bracket = [](char x){ return(')' == x || '(' == x);};
+			if(detect_bracket(str.back()))
+				str.pop_back();
 
+			if(detect_bracket(str.front()))
+				str.erase(str.begin());
+		} else {
+			throw std::logic_error("Brackets can be only removed for brackets container");
+		}
+	}
+	/* Outputs */
+	void print(int print_offset_ = 0, int child_offset_ = 2)
+	{
+		string offset = std::string(print_offset_, ' ');
+
+		string brackets;
+		if(this->extr_brackets) brackets = "     ->  ((";
+
+		cout << "DEBUG: " << offset <<
+				this->type << " : " << str << " op " << this->opTypeInside() << brackets << endl;
+		for (auto& p : children)
+			p->print(print_offset_ + child_offset_);
+	}
 	string extract()
 	{
 		string extract;
-		if(!hasChildren())
+		if(hasChildren())
 		{
-			return(str);
-		}
-		else{
 			bool with_brackets = this->extr_brackets;
 			if(with_brackets) extract += '(';
 			for (const auto& p : children)
@@ -204,29 +223,21 @@ struct ExprContainer
 			}
 			if(with_brackets) extract += ')';
 		}
+		else{
+			return(str);
+		}
 		return(extract);
 	}
-
-
 };
 //////////////////////////////////////////////////
-inline bool is_bracket(const char& chr)
+inline void parse_string(ExprContainer& cont_)
 {
-	return (chr == '(' || chr == ')');
-}
-
-inline bool is_operator(const char& chr)
-{
-	return (chr == '*' || chr == '+' || chr == '/' || chr == '-');
-}
-
-void parse_string(ExprContainer& cont_)
-{
-	string::iterator start = cont_.str.begin();
 	const string::iterator& end = cont_.str.end();
-	for(auto& it = start; it != end; ++it)
+	auto it = cont_.str.begin();
+	while (it != end)
 	{
 		const auto& cur_chr = *it;
+//		cout << "DEBUG: " << cur_chr << endl;
 		if(isspace(cur_chr))
 		{
 			continue;
@@ -236,11 +247,10 @@ void parse_string(ExprContainer& cont_)
 		} else if (is_operator(cur_chr))
 		{
 			cont_.addChild(ExprType::Operator, cur_chr);
-		} else if (is_bracket(cur_chr))
-		{
+		} else if (cur_chr == '(') {
 			auto txt_in_brackets = get_between_brackets(it, end);
 			shared_ptr<ExprContainer> bracketsCont = make_shared<ExprContainer>(ExprType::Brackets, txt_in_brackets);
-			bracketsCont->removeBrackets();
+			bracketsCont->removeBrackets();//FIXME removes non-bracket from end!
 			parse_string(*bracketsCont);
 			if(!bracketsCont->hasChildren())
 			{
@@ -251,8 +261,12 @@ void parse_string(ExprContainer& cont_)
 				cont_.addChild(bracketsCont);
 			}
 		}
+		if(it == end){
+			break;
+		} else {
+			std::advance(it, 1);
+		}
 	}
-	cont_.str.erase(cont_.str.begin(), cont_.str.end());
 }
 //////////////////////////////////////////////////
 /*                       +  -  *  /    */
@@ -279,6 +293,7 @@ which_to_wrap(OpType opr, OpType left, OpType right)
 	bool towrapleft = false;
 	bool towrapright = false;
 	int opr_pr = opr_prio(opr);
+
 	if(opr_pr > left_prio(left)) {
 		towrapleft = true;
 	}
@@ -287,6 +302,7 @@ which_to_wrap(OpType opr, OpType left, OpType right)
 	}
 	return(std::make_tuple(towrapleft, towrapright));
 }
+//////////////////////////////////////////////////
 
 void mark_brackets(ExprContainer& input_cont_)
 {
@@ -297,20 +313,25 @@ void mark_brackets(ExprContainer& input_cont_)
 		{
 			mark_brackets(curr_opr);
 		} else if (curr_opr.type == ExprType::Operator) {
+
+			auto& prev_chld_ptr = *(prev(opr_it));
+			bool is_missing_prev = (prev_chld_ptr == nullptr);
+
 			auto& prev_chld = **(opr_it-1);
 			auto& next_chld = **(opr_it+1);
-			OpType left = prev_chld.opTypeInside();
+
+			OpType left = (!is_missing_prev) ? prev_chld.opTypeInside() : OpType::NA;
 			OpType right = next_chld.opTypeInside();
 			bool left_brackets = false;
 			bool right_brackets = false;
 			std::tie(left_brackets, right_brackets) = which_to_wrap(curr_opr.opTypeInside(), left, right);
-			if(left_brackets == true) prev_chld.setBrackets();
+			if(left_brackets == true && !is_missing_prev) prev_chld.setBrackets();
 			if(right_brackets == true) next_chld.setBrackets();
 		}
 	}
 }
 
-string remove_excess_brackets(string str)
+string remove_excess_brackets(string& str)
 {
 	ExprContainer top(str);
 	parse_string(top);
@@ -319,19 +340,65 @@ string remove_excess_brackets(string str)
 	return(extract);
 }
 
+///////////////////////////////////////////////
+bool test(string tst, string expect, bool verbose_ = true)
+{
+	ExprContainer top(tst);
+	parse_string(top);
+	mark_brackets(top);
+	string extract = top.extract();
+	if(verbose_)
+	{
+		top.print();
+		cout << tst << " -> " << extract << endl;
+	}
+	bool passed = expect == extract;
+	if(!passed) cout << "must be " <<  expect << endl;
+	return(passed);
+}
+
+//#include <gperftools/profiler.h>
+
 int main()
 {
-	int num_of_expr;
-	std::cin >> num_of_expr;
-	vector<string> unparsed(num_of_expr);
-	for(int i = 0; i < num_of_expr; i++)
-	{
-		std::cin >> unparsed[i];
+//	ProfilerStart("/home/cracs/CMEXPR.txt");
+//    for(int i = 0; i < 10000; i++)
+//    {
+//    }
+//    ProfilerFlush();
+//    ProfilerStop();
 
-	}
-	for(auto& unpr : unparsed)
-		cout << remove_excess_brackets(unpr) << endl;
+//	test("-(a)"	, "-a", false);
+//	test("(a+b"	, "a+b", false);
+//	test("a+b)"	, "a+b", false);
+//	test("a+(b-c*(d-e))/g"	, "a+(b-c*(d-e))/g", false);
+//	test("(a+((b+c+d)/g))"	, "a+(b+c+d)/g", false);
+//	test("((a)+(b*c))"	, "a+b*c", false);
+//	test("(a+(b*c))"	, "a+b*c", false);
+//	test("((a+b)*c)"	, "(a+b)*c", false);
+	test("(a*b)/c)"	, "a*b/c", true);
+//	test("(a*(b*c))"	, "a*b*c", false);
+//	test("(a*(b/c)*d)"	, "a*b/c*d", false);
+//	test("((a/(b/c))/d)"	, "a/(b/c)/d", false);
+//	test("((x))"	, "x", false);
+//	test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false);
+//	test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false);
+//	test("((((((a)+b)+c)+d)*e)+f)*g"	, "((a+b+c+d)*e+f)*g", false);
+//	test("a+(b-c*(d-e)/f)/g"	, "a+(b-c*(d-e)/f)/g", false);
+//	cout << "DONE" << endl;
 
-	return(0);
+
+//	uint num_of_expr;
+//	std::cin >> num_of_expr;
+//	vector<string> unparsed(num_of_expr);
+//	for(uint i = 0; i < num_of_expr; i++)
+//	{
+//		std::cin >> unparsed[i];
+//		if(std::cin.eof()) break;
+//	}
+//	for(auto& unpr : unparsed)
+//		cout << remove_excess_brackets(unpr) << endl;
+//
+//	return(0);
 }
 
