@@ -139,20 +139,31 @@ struct ExprContainer
 		children.emplace_back(chld_ptr);
 	}
 	shared_ptr<ExprContainer> addChild(ExprType type_, string str_)
-			{
+					{
 		shared_ptr<ExprContainer> chld = make_shared<ExprContainer>(type_, str_);
 		children.emplace_back(chld);
 		return(chld);
-			}
+					}
 	void addChild(ExprType type_, const char& chr_)
 	{
 		addChild(type_, string(1, chr_));
 	}
-	bool hasChildren()
+	inline bool hasChildren()
 	{
 		return(!children.empty());
 	}
+	inline bool hasOneChild()
+	{
+		return(children.size() == 1);
+	}
+	inline bool hasMoreThanOneChild()
+	{
+		return(children.size() > 1);
+	}
 
+	/* @recursive
+	 * If has children with more than one element inside
+	 * */
 	bool hasChildrenRecursive()
 	{
 		if(this->hasChildren())
@@ -169,19 +180,23 @@ struct ExprContainer
 		}
 		return(false);
 	}
-	/* return operation inside the container or operation of itself*/
+	/* Operation inside (0 or 1 level down);
+	 * */
 	OpType opTypeInside()
 	{
 		if(this->isset_operator_inside)
 		{
 			return(this->operator_inside);
-		} else if(hasChildren()) {
+		} else if(hasOneChild()) {
+			return(setOpTypeInside(children.front()->opTypeInside()));
+		} else if(hasMoreThanOneChild()) {
 			OpType min_op_type = OpType::NA;
 			/* Scan all childern and find minimim operator from all included, but bigger than NA*/
 			for(auto& chld : children)
 			{
 				ExprContainer& chldref = (*chld);
-				auto op_type = chldref.opTypeInside();
+//				auto op_type = chldref.opTypeInside();
+				auto op_type = chldref.operator_type;/* No recursion, because we just looking on one level below*/
 				if(op_type == OpType::NA)
 				{
 					continue;
@@ -189,17 +204,23 @@ struct ExprContainer
 					min_op_type = op_type;
 				}
 			}
-			this->operator_inside = min_op_type;
-			this->isset_operator_inside = true;
-			return(min_op_type);
+			return(setOpTypeInside(min_op_type));
 		} else {
 			return(this->operator_type);
 		}
 	}
+
+	OpType setOpTypeInside(const OpType op)
+	{
+		this->operator_inside = op;
+		this->isset_operator_inside = true;
+		return(op);
+	}
+
 	/* Brackets related */
 	void setBrackets()
 	{
-		if(this->type == ExprType::Brackets && !this->hasChildrenRecursive())
+		if( (this->type == ExprType::Brackets && !this->hasChildrenRecursive()))
 		{
 			;
 		} else {
@@ -242,6 +263,7 @@ struct ExprContainer
 	{
 		string extract;
 		if(hasChildren())
+			//		if(this->hasChildrenRecursive())
 		{
 			bool with_brackets = this->extr_brackets;
 			if(with_brackets) extract += '(';
@@ -258,7 +280,7 @@ struct ExprContainer
 	}
 };
 //////////////////////////////////////////////////
-inline void parse_string(ExprContainer& cont_)
+inline void parse_string(ExprContainer& cont_)//FIXME if the container is just wrapper, need to delete itermediary level
 {
 	const string::iterator& end = cont_.str.end();
 	auto it = cont_.str.begin();
@@ -441,86 +463,79 @@ int main()
 //	test("(a+b)+(c-d)-(e+f)"          , "a+b+c-d-(e+f)"                         , false);
 //	test("((((((a)+b)+c)+d)*e)+f)*g"  , "((a+b+c+d)*e+f)*g"                     , false);
 //	test("a+(b-c*(d-e)/f)/g"          , "a+(b-c*(d-e)/f)/g"                     , false);
-//
-//	test("a*b+(b-b+b)","a*b+b-b+b", false);
+//	test("a*b+(b-b+b)","a*b+b-b+b"  , false);
 //	test("a*b/(a-c*c)","a*b/(a-c*c)", false);
 //	test("b+b*(a+a-b)","b+b*(a+a-b)", false);
 //	test("c/c*(b+a*a)","c/c*(b+a*a)", false);
-//	test("a+c+(a+a+a)","a+c+a+a+a", false);
+//	test("a+c+(a+a+a)","a+c+a+a+a"  , false);
 //	test("b-c*(a*c-a)","b-c*(a*c-a)", false);
-//	test("a/c-(c*b/b)","a/c-c*b/b", false);
-//	test("c+a*(b/c/c)","c+a*b/c/c", false);
-
-  test("a+(b+c)/(d+((f+(k+m))+n))","a+(b+c)/(d+f+k+m+n)"    , false);
-  test("(a-b-c+(d+(((f/k+m))/n)))","a-b-c+d+(f/k+m)/n"      , false);
-  test("(a/b+(c-d)/(((f)-k))-m+n)","a/b+(c-d)/(f-k)-m+n"    , false);
-  test("a-(b+(c/d+f)-(k)/((m+n)))","a-(b+c/d+f-k/(m+n))"    , false);
-  test("a-(b+(c-((d/f)+(k)+m))+n)","a-(b+c-(d/f+k+m)+n)"    , false);
-  test("(a/b/(c-d)/((f/k))/(m)-n)","a/b/(c-d)/(f/k)/m-n"    , false);
-  test("(a+((b/c)/d+(f)+k/(m))/n)","a+(b/c/d+f+k/m)/n"      , false);
-  test("(((a+b+(c)/d)/(f)/k)/m)/n","(a+b+c/d)/f/k/m/n"      , true);
-//  test("a+b+c+(d-((f-(k))+(m+n)))","a+b+c+d-(f-k+m+n)"      , false);
-//  test("(a/(b+(c+((d)/f)/k))/m)-n","a/(b+c+d/f/k)/m-n"      , false);
-//  test("(a-b/(c/(d)/(f)-(k-m)/n))","a-b/(c/d/f-(k-m)/n)"    , false);
-//  test("a+((b/c+d))+f+(k/((m/n)))","a+b/c+d+f+k/(m/n)"      , false);
-//  test("a+b+c+(((d-f/(k/(m)))-n))","a+b+c+d-f/(k/m)-n"      , false);
-//  test("((a+b)-c-d-f+k)-(((m+n)))","a+b-c-d-f+k-(m+n)"      , false);
-//  test("(a+b+c)-(d-((f+(k))+m))+n","a+b+c-(d-(f+k+m))+n"    , false);
-//  test("(a+(b+(c)+(d-f)+k/(m)-n))","a+b+c+d-f+k/m-n"        , false);
-//  test("(a+((b/c/d-f+k)+((m))/n))","a+b/c/d-f+k+m/n"        , false);
-//  test("(a+b)/(((c/(d/f+k))+m-n))","(a+b)/(c/(d/f+k)+m-n)"  , false);
-//  test("a+(b+c)+d-f+(((k+(m)))+n)","a+b+c+d-f+k+m+n"        , false);
-//  test("a-b/((c+(d)/(f)+k+(m+n)))","a-b/(c+d/f+k+m+n)"      , false);
-//  test("(a+(b-(c+(d+(f/k))+m)/n))","a+b-(c+d+f/k+m)/n"      , false);
-//  test("((a-b+c)+d-((f-(k)+m)+n))","a-b+c+d-(f-k+m+n)"      , false);
-//  test("(a-((b-c+d))+(f-(k-m))/n)","a-(b-c+d)+(f-(k-m))/n"  , false);
-//  test("(a-(b+c)+d)/((f+k+(m)-n))","(a-(b+c)+d)/(f+k+m-n)"  , false);
-//  test("(a+b-(c+(d)-f)-(k/(m)/n))","a+b-(c+d-f)-k/m/n"      , false);
-//  test("(a+(b+c)-(d/((f)+k+m)-n))","a+b+c-(d/(f+k+m)-n)"    , false);
-//  test("a+b/(c+d/((f+(k))/(m+n)))","a+b/(c+d/((f+k)/(m+n)))", false);
-//  test("(a-b+((c/(d)+(f+k))+m)+n)","a-b+c/d+f+k+m+n"        , false);
-//  test("(a+b-((c+(d)+f)/(k/m)+n))","a+b-((c+d+f)/(k/m)+n)"  , false);
-//  test("a+b+c+(d-f-(((k)+(m))/n))","a+b+c+d-f-(k+m)/n"      , false);
-//  test("(a+(((b-(c)+d)+f)-k)+m+n)","a+b-c+d+f-k+m+n"        , false);
-//  test("a-b+c/(d+(f-k/(((m-n)))))","a-b+c/(d+f-k/(m-n))"    , false);
-//  test("a+((b+c+d+(f)+(k)+(m)+n))","a+b+c+d+f+k+m+n"        , false);
-//  test("a/b+c+(d+(f)/(k+((m)/n)))","a/b+c+d+f/(k+m/n)"      , false);
-//  test("(a+(b+(c/d+(f))+(k-m))+n)","a+b+c/d+f+k-m+n"        , false);
-//  test("(a-b+c-d)/((((f-k))-m+n))","(a-b+c-d)/(f-k-m+n)"    , false);
-//  test("a/(b-c+d+(f/(k+((m))+n)))","a/(b-c+d+f/(k+m+n))"    , false);
-//  test("a+((b-(c)+(d)+f)-k)+(m+n)","a+b-c+d+f-k+m+n"        , false);
-//  test("a+b-((c/(d/(f)/(k)))+m)/n","a+b-(c/(d/f/k)+m)/n"    , false);
-//  test("((a+b+(c+((d+f)))/k+m+n))","a+b+(c+d+f)/k+m+n"      , false);
-//  test("(a/b+((((c+d+f))/k+m)/n))","a/b+((c+d+f)/k+m)/n"    , false);
-//  test("a/(b-(c-(d+f-(k)/(m))/n))","a/(b-(c-(d+f-k/m)/n))"  , false);
-//  test("a+(((b+c-d+f)+k)+((m/n)))","a+b+c-d+f+k+m/n"        , false);
-//  test("(a-b+c-d-((f+(k-(m))+n)))","a-b+c-d-(f+k-m+n)"      , false);
-//  test("(((a+b)+c+(d/(f))/k)/m)+n","(a+b+c+d/f/k)/m+n"      , false);
-//  test("a/(b-(c+(d-f+(k)+(m)+n)))","a/(b-(c+d-f+k+m+n))"    , false);
-//  test("a+b-(c+(d-(f)+(k/(m)))+n)","a+b-(c+d-f+k/m+n)"      , false);
-//  test("(a+(b/((c+(d)/f)-k/m+n)))","a+b/(c+d/f-k/m+n)"      , false);
-//  test("(a-((b-c+d)+(f+k))+(m-n))","a-(b-c+d+f+k)+m-n"      , false);
-//  test("((a-b+(c+d+(f/(k+m)/n))))","a-b+c+d+f/(k+m)/n"      , false);
-
-
-
-
-
-
-	cout << endl << endl << "DONE" << endl;
-
-
-//		uint num_of_expr;
-//		std::cin >> num_of_expr;
-//		vector<string> unparsed(num_of_expr);
-//		for(uint i = 0; i < num_of_expr; i++)
-//		{
-//			std::cin >> unparsed[i];
-//			if(std::cin.eof()) break;
-//		}
-//		for(auto& unpr : unparsed)
-//			cout << remove_excess_brackets(unpr) << endl;
+//	test("a/c-(c*b/b)","a/c-c*b/b"  , false);
+//	test("c+a*(b/c/c)","c+a*b/c/c"  , false);
 //
-//		return(0);
+//	test("a+(b+c)/(d+((f+(k+m))+n))","a+(b+c)/(d+f+k+m+n)"    , false);
+//	test("(a-b-c+(d+(((f/k+m))/n)))","a-b-c+d+(f/k+m)/n"      , false);
+//	test("(a/b+(c-d)/(((f)-k))-m+n)","a/b+(c-d)/(f-k)-m+n"    , false);
+//	test("a-(b+(c/d+f)-(k)/((m+n)))","a-(b+c/d+f-k/(m+n))"    , false);
+//	test("a-(b+(c-((d/f)+(k)+m))+n)","a-(b+c-(d/f+k+m)+n)"    , false);
+//	test("(a/b/(c-d)/((f/k))/(m)-n)","a/b/(c-d)/(f/k)/m-n"    , false);
+//	test("(a+((b/c)/d+(f)+k/(m))/n)","a+(b/c/d+f+k/m)/n"      , false);
+//	test("(((a+b+(c)/d)/(f)/k)/m)/n","(a+b+c/d)/f/k/m/n"      , false);
+//	test("a+b+c+(d-((f-(k))+(m+n)))","a+b+c+d-(f-k+m+n)"      , false);
+//	test("(a/(b+(c+((d)/f)/k))/m)-n","a/(b+c+d/f/k)/m-n"      , false);
+//	test("(a-b/(c/(d)/(f)-(k-m)/n))","a-b/(c/d/f-(k-m)/n)"    , false);
+//	test("a+((b/c+d))+f+(k/((m/n)))","a+b/c+d+f+k/(m/n)"      , false);
+//	  test("a+b+c+(((d-f/(k/(m)))-n))","a+b+c+d-f/(k/m)-n"      , false);
+//	  test("((a+b)-c-d-f+k)-(((m+n)))","a+b-c-d-f+k-(m+n)"      , false);
+//	  test("(a+b+c)-(d-((f+(k))+m))+n","a+b+c-(d-(f+k+m))+n"    , false);
+//	  test("(a+(b+(c)+(d-f)+k/(m)-n))","a+b+c+d-f+k/m-n"        , false);
+//	  test("(a+((b/c/d-f+k)+((m))/n))","a+b/c/d-f+k+m/n"        , false);
+//	  test("(a+b)/(((c/(d/f+k))+m-n))","(a+b)/(c/(d/f+k)+m-n)"  , false);
+//	  test("a+(b+c)+d-f+(((k+(m)))+n)","a+b+c+d-f+k+m+n"        , false);
+//	  test("a-b/((c+(d)/(f)+k+(m+n)))","a-b/(c+d/f+k+m+n)"      , false);
+//	  test("(a+(b-(c+(d+(f/k))+m)/n))","a+b-(c+d+f/k+m)/n"      , false);
+//	  test("((a-b+c)+d-((f-(k)+m)+n))","a-b+c+d-(f-k+m+n)"      , false);
+//	  test("(a-((b-c+d))+(f-(k-m))/n)","a-(b-c+d)+(f-(k-m))/n"  , false);
+//	  test("(a-(b+c)+d)/((f+k+(m)-n))","(a-(b+c)+d)/(f+k+m-n)"  , false);
+//	  test("(a+b-(c+(d)-f)-(k/(m)/n))","a+b-(c+d-f)-k/m/n"      , false);
+//	  test("(a+(b+c)-(d/((f)+k+m)-n))","a+b+c-(d/(f+k+m)-n)"    , false);
+//	  test("a+b/(c+d/((f+(k))/(m+n)))","a+b/(c+d/((f+k)/(m+n)))", false);
+//	  test("(a-b+((c/(d)+(f+k))+m)+n)","a-b+c/d+f+k+m+n"        , false);
+//	  test("(a+b-((c+(d)+f)/(k/m)+n))","a+b-((c+d+f)/(k/m)+n)"  , false);
+//	  test("a+b+c+(d-f-(((k)+(m))/n))","a+b+c+d-f-(k+m)/n"      , false);
+//	  test("(a+(((b-(c)+d)+f)-k)+m+n)","a+b-c+d+f-k+m+n"        , false);
+//	  test("a-b+c/(d+(f-k/(((m-n)))))","a-b+c/(d+f-k/(m-n))"    , false);
+//	  test("a+((b+c+d+(f)+(k)+(m)+n))","a+b+c+d+f+k+m+n"        , false);
+//	  test("a/b+c+(d+(f)/(k+((m)/n)))","a/b+c+d+f/(k+m/n)"      , false);
+//	  test("(a+(b+(c/d+(f))+(k-m))+n)","a+b+c/d+f+k-m+n"        , false);
+//	  test("(a-b+c-d)/((((f-k))-m+n))","(a-b+c-d)/(f-k-m+n)"    , false);
+//	  test("a/(b-c+d+(f/(k+((m))+n)))","a/(b-c+d+f/(k+m+n))"    , false);
+//	  test("a+((b-(c)+(d)+f)-k)+(m+n)","a+b-c+d+f-k+m+n"        , false);
+//	  test("a+b-((c/(d/(f)/(k)))+m)/n","a+b-(c/(d/f/k)+m)/n"    , false);
+//	  test("((a+b+(c+((d+f)))/k+m+n))","a+b+(c+d+f)/k+m+n"      , false);
+//	  test("(a/b+((((c+d+f))/k+m)/n))","a/b+((c+d+f)/k+m)/n"    , false);
+//	  test("a/(b-(c-(d+f-(k)/(m))/n))","a/(b-(c-(d+f-k/m)/n))"  , false);
+//	  test("a+(((b+c-d+f)+k)+((m/n)))","a+b+c-d+f+k+m/n"        , false);
+//	  test("(a-b+c-d-((f+(k-(m))+n)))","a-b+c-d-(f+k-m+n)"      , false);
+//	  test("(((a+b)+c+(d/(f))/k)/m)+n","(a+b+c+d/f/k)/m+n"      , false);
+//	  test("a/(b-(c+(d-f+(k)+(m)+n)))","a/(b-(c+d-f+k+m+n))"    , false);
+//	  test("a+b-(c+(d-(f)+(k/(m)))+n)","a+b-(c+d-f+k/m+n)"      , false);
+//	  test("(a+(b/((c+(d)/f)-k/m+n)))","a+b/(c+d/f-k/m+n)"      , false);
+//	  test("(a-((b-c+d)+(f+k))+(m-n))","a-(b-c+d+f+k)+m-n"      , false);
+//	  test("((a-b+(c+d+(f/(k+m)/n))))","a-b+c+d+f/(k+m)/n"      , false);
+//	cout << endl << endl << "DONE" << endl;
+
+
+			uint num_of_expr;
+			std::cin >> num_of_expr;
+			vector<string> unparsed(num_of_expr);
+			for(uint i = 0; i < num_of_expr; i++)
+			{
+				std::cin >> unparsed[i];
+				if(std::cin.eof()) break;
+			}
+			for(auto& unpr : unparsed)
+				cout << remove_excess_brackets(unpr) << endl;
+
+			return(0);
 }
 
