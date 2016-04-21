@@ -48,20 +48,20 @@ enum class ExprType {
  * */
 enum class OpType {
 	NA = 0,
-	Sum = 1,
-	Minus = 2,
-	Product = 3,
-	Div = 4
+			Sum = 1,
+			Minus = 2,
+			Product = 3,
+			Div = 4
 };
 std::ostream& operator << (std::ostream& os, const ExprType& obj)
 {
-   os << static_cast<std::underlying_type<ExprType>::type>(obj);
-   return(os);
+	os << static_cast<std::underlying_type<ExprType>::type>(obj);
+	return(os);
 }
 std::ostream& operator << (std::ostream& os, const OpType& obj)
 {
-   os << static_cast<std::underlying_type<OpType>::type>(obj);
-   return(os);
+	os << static_cast<std::underlying_type<OpType>::type>(obj);
+	return(os);
 }
 
 /* Misc functions*/
@@ -83,8 +83,8 @@ string get_between_brackets(string::iterator& tail_, const string::iterator& end
 			const auto& chr = *tail_;
 			switch(chr)
 			{
-				case '(': br_cnt++; break;
-				case ')': br_cnt--; break;
+			case '(': br_cnt++; break;
+			case ')': br_cnt--; break;
 			}
 			if(br_cnt >= 0)
 				brackets_content.push_back(chr);
@@ -112,17 +112,23 @@ struct ExprContainer
 	OpType operator_type = OpType::NA;
 	bool isset_operator_inside = false;
 	OpType operator_inside = operator_type;
+
+	int left_prio_dbg  = 0;
+	int opr_prio_dbg   = 0;
+	int right_prio_dbg = 0;
+
+
 	/* CONSTRUCTORS */
 	ExprContainer(ExprType type_, const string str_) : type(type_), str(str_) {
 		if(type_ == ExprType::Operator)
 		{
 			switch(str_.front())
 			{
-				case '+': this->operator_type = OpType::Sum; break;
-				case '-': this->operator_type = OpType::Minus; break;
-				case '*': this->operator_type = OpType::Product; break;
-				case '/': this->operator_type = OpType::Div; break;
-				throw std::invalid_argument("input is not an operator");
+			case '+': this->operator_type = OpType::Sum; break;
+			case '-': this->operator_type = OpType::Minus; break;
+			case '*': this->operator_type = OpType::Product; break;
+			case '/': this->operator_type = OpType::Div; break;
+			throw std::invalid_argument("input is not an operator");
 			}
 		}
 	};
@@ -133,11 +139,11 @@ struct ExprContainer
 		children.emplace_back(chld_ptr);
 	}
 	shared_ptr<ExprContainer> addChild(ExprType type_, string str_)
-	{
+			{
 		shared_ptr<ExprContainer> chld = make_shared<ExprContainer>(type_, str_);
 		children.emplace_back(chld);
 		return(chld);
-	}
+			}
 	void addChild(ExprType type_, const char& chr_)
 	{
 		addChild(type_, string(1, chr_));
@@ -145,6 +151,23 @@ struct ExprContainer
 	bool hasChildren()
 	{
 		return(!children.empty());
+	}
+
+	bool hasChildrenRecursive()
+	{
+		if(this->hasChildren())
+		{
+			if(this->children.size() > 1)
+			{
+				return(true);
+			} else {
+				for(const auto & chld : this->children)
+				{
+					if(chld->hasChildrenRecursive()) return(true);
+				}
+			}
+		}
+		return(false);
 	}
 	/* return operation inside the container or operation of itself*/
 	OpType opTypeInside()
@@ -176,7 +199,7 @@ struct ExprContainer
 	/* Brackets related */
 	void setBrackets()
 	{
-		if(this->type == ExprType::Brackets && children.size() == 1)
+		if(this->type == ExprType::Brackets && !this->hasChildrenRecursive())
 		{
 			;
 		} else {
@@ -202,11 +225,16 @@ struct ExprContainer
 	{
 		string offset = std::string(print_offset_, ' ');
 
-		string brackets;
+		string brackets = "";
 		if(this->extr_brackets) brackets = "     ->  ((";
 
-		cout << "DEBUG: " << offset <<
-				this->type << " : " << str << " op " << this->opTypeInside() << brackets << endl;
+		cout << "DEBUG: " << offset << this->type << " : " << str;
+		if(this->hasChildren() || this->type == ExprType::Operator)
+		{
+			cout << " op " << this->opTypeInside() << brackets  <<
+					" prio " << left_prio_dbg << opr_prio_dbg << right_prio_dbg;
+		}
+		cout << endl;
 		for (auto& p : children)
 			p->print(print_offset_ + child_offset_);
 	}
@@ -237,7 +265,7 @@ inline void parse_string(ExprContainer& cont_)
 	while (it != end)
 	{
 		const auto& cur_chr = *it;
-//		cout << "DEBUG: " << cur_chr << endl;
+		//		cout << "DEBUG: " << cur_chr << endl;
 		if(isspace(cur_chr))
 		{
 			continue;
@@ -270,9 +298,9 @@ inline void parse_string(ExprContainer& cont_)
 }
 //////////////////////////////////////////////////
 /*                       +  -  *  /    */
-int left_prios[5]  = {0, 3, 3, 4, 7};
-int opr_prios[5]   = {0, 2, 3, 4, 7};
-int right_prios[5] = {0, 2, 2, 4, 5};
+int left_prios[5]  = {0, 3, 3, 5, 5};
+int opr_prios[5]   = {0, 2, 3, 4, 5};
+int right_prios[5] = {0, 2, 2, 4, 4};
 
 inline int opr_prio(OpType operat)
 {
@@ -287,17 +315,45 @@ inline int right_prio(OpType operand)
 	return(right_prios[(int)operand]);
 }
 
+//std::tuple<bool, bool>
+//which_to_wrap(OpType opr, OpType left, OpType right)
+//{
+//	bool towrapleft = false;
+//	bool towrapright = false;
+//	int opr_pr = opr_prio(opr);
+//
+//	if(opr_pr > left_prio(left)) {
+//		towrapleft = true;
+//	}
+//	if(opr_pr > right_prio(right)) {
+//		towrapright = true;
+//	}
+//	return(std::make_tuple(towrapleft, towrapright));
+//}
+
 std::tuple<bool, bool>
-which_to_wrap(OpType opr, OpType left, OpType right)
+which_to_wrap(shared_ptr<ExprContainer>& opr, shared_ptr<ExprContainer>& left, shared_ptr<ExprContainer>& right)
 {
 	bool towrapleft = false;
 	bool towrapright = false;
-	int opr_pr = opr_prio(opr);
 
-	if(opr_pr > left_prio(left)) {
+	OpType opr_op = (opr != nullptr) ? opr->opTypeInside() : OpType::NA;
+	OpType left_op  = (left != nullptr) ? left->opTypeInside() : OpType::NA;
+	OpType right_op = (right != nullptr) ? right->opTypeInside() : OpType::NA;
+
+	int opr_pr = opr_prio(opr_op);
+	int left_pr = left_prio(left_op);
+	int right_pr = right_prio(right_op);
+
+	/*DEBUG*/
+	if(opr != nullptr) opr->opr_prio_dbg = opr_pr;
+	if(left != nullptr) left->left_prio_dbg = left_pr;
+	if(right != nullptr) right->right_prio_dbg = right_pr;
+
+	if(opr_pr > left_pr) {
 		towrapleft = true;
 	}
-	if(opr_pr > right_prio(right)) {
+	if(opr_pr > right_pr) {
 		towrapright = true;
 	}
 	return(std::make_tuple(towrapleft, towrapright));
@@ -308,25 +364,25 @@ void mark_brackets(ExprContainer& input_cont_)
 {
 	for(auto opr_it = input_cont_.children.begin(); opr_it !=  input_cont_.children.end(); ++opr_it)
 	{
-		ExprContainer& curr_opr = (**opr_it);
-		if(curr_opr.hasChildren())
+		auto& curr_opr = (*opr_it);
+		if(curr_opr->hasChildren())
 		{
-			mark_brackets(curr_opr);
-		} else if (curr_opr.type == ExprType::Operator) {
+			mark_brackets(*curr_opr);
+		} else if (curr_opr->type == ExprType::Operator) {
 
-			auto& prev_chld_ptr = *(prev(opr_it));
-			bool is_missing_prev = (prev_chld_ptr == nullptr);
+			auto& prev_chld = *(opr_it-1);
+			auto& next_chld = *(opr_it+1);
 
-			auto& prev_chld = **(opr_it-1);
-			auto& next_chld = **(opr_it+1);
-
-			OpType left = (!is_missing_prev) ? prev_chld.opTypeInside() : OpType::NA;
-			OpType right = next_chld.opTypeInside();
 			bool left_brackets = false;
 			bool right_brackets = false;
-			std::tie(left_brackets, right_brackets) = which_to_wrap(curr_opr.opTypeInside(), left, right);
-			if(left_brackets == true && !is_missing_prev) prev_chld.setBrackets();
-			if(right_brackets == true) next_chld.setBrackets();
+			std::tie(left_brackets, right_brackets) = which_to_wrap(curr_opr, prev_chld, next_chld);
+
+			bool is_missing_prev = (prev_chld == nullptr);
+			if(left_brackets == true && !is_missing_prev)
+				prev_chld->setBrackets();
+			if(right_brackets == true)
+				next_chld->setBrackets();
+
 		}
 	}
 }
@@ -353,7 +409,7 @@ bool test(string tst, string expect, bool verbose_ = true)
 		cout << tst << " -> " << extract << endl;
 	}
 	bool passed = expect == extract;
-	if(!passed) cout << "must be " <<  expect << endl;
+	if(!passed) cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!    must be " <<  expect << endl;
 	return(passed);
 }
 
@@ -361,44 +417,110 @@ bool test(string tst, string expect, bool verbose_ = true)
 
 int main()
 {
-//	ProfilerStart("/home/cracs/CMEXPR.txt");
-//    for(int i = 0; i < 10000; i++)
-//    {
-//    }
-//    ProfilerFlush();
-//    ProfilerStop();
+	//	ProfilerStart("/home/cracs/CMEXPR.txt");
+	//    for(int i = 0; i < 10000; i++)
+	//    {
+	//    }
+	//    ProfilerFlush();
+	//    ProfilerStop();
 
-//	test("-(a)"	, "-a", false);
-//	test("(a+b"	, "a+b", false);
-//	test("a+b)"	, "a+b", false);
-//	test("a+(b-c*(d-e))/g"	, "a+(b-c*(d-e))/g", false);
-//	test("(a+((b+c+d)/g))"	, "a+(b+c+d)/g", false);
-//	test("((a)+(b*c))"	, "a+b*c", false);
-//	test("(a+(b*c))"	, "a+b*c", false);
-//	test("((a+b)*c)"	, "(a+b)*c", false);
-	test("(a*b)/c)"	, "a*b/c", true);
-//	test("(a*(b*c))"	, "a*b*c", false);
-//	test("(a*(b/c)*d)"	, "a*b/c*d", false);
-//	test("((a/(b/c))/d)"	, "a/(b/c)/d", false);
-//	test("((x))"	, "x", false);
-//	test("(a+b)-(c-d)-(e/f)"	, "a+b-(c-d)-e/f", false);
-//	test("(a+b)+(c-d)-(e+f)"	, "a+b+c-d-(e+f)", false);
-//	test("((((((a)+b)+c)+d)*e)+f)*g"	, "((a+b+c+d)*e+f)*g", false);
-//	test("a+(b-c*(d-e)/f)/g"	, "a+(b-c*(d-e)/f)/g", false);
-//	cout << "DONE" << endl;
-
-
-//	uint num_of_expr;
-//	std::cin >> num_of_expr;
-//	vector<string> unparsed(num_of_expr);
-//	for(uint i = 0; i < num_of_expr; i++)
-//	{
-//		std::cin >> unparsed[i];
-//		if(std::cin.eof()) break;
-//	}
-//	for(auto& unpr : unparsed)
-//		cout << remove_excess_brackets(unpr) << endl;
+//	test("-(a)"                       , "-a"                                    , false);
+//	test("(a+b"                       , "a+b"                                   , false);
+//	test("a+b)"                       , "a+b"                                   , false);
+//	test("a+(b-c*(d-e))/g"            , "a+(b-c*(d-e))/g"                       , false);
+//	test("(a+((b+c+d)/g))"            , "a+(b+c+d)/g"                           , false);
+//	test("((a)+(b*c))"                , "a+b*c"                                 , false);
+//	test("(a+(b*c))"                  , "a+b*c"                                 , false);
+//	test("((a+b)*c)"                  , "(a+b)*c"                               , false);
+//	test("(a*b)/c)"                   , "a*b/c"                                 , false);  /**/
+//	test("(a*(b*c))"                  , "a*b*c"                                 , false);
+//	test("(a*(b/c)*d)"                , "a*b/c*d"                               , false);  /**/
+//	test("((a/(b/c))/d)"              , "a/(b/c)/d"                             , false);  /**/
+//	test("((x))"                      , "x"                                     , false);
+//	test("(a+b)-(c-d)-(e/f)"          , "a+b-(c-d)-e/f"                         , false);
+//	test("(a+b)+(c-d)-(e+f)"          , "a+b+c-d-(e+f)"                         , false);
+//	test("((((((a)+b)+c)+d)*e)+f)*g"  , "((a+b+c+d)*e+f)*g"                     , false);
+//	test("a+(b-c*(d-e)/f)/g"          , "a+(b-c*(d-e)/f)/g"                     , false);
 //
-//	return(0);
+//	test("a*b+(b-b+b)","a*b+b-b+b", false);
+//	test("a*b/(a-c*c)","a*b/(a-c*c)", false);
+//	test("b+b*(a+a-b)","b+b*(a+a-b)", false);
+//	test("c/c*(b+a*a)","c/c*(b+a*a)", false);
+//	test("a+c+(a+a+a)","a+c+a+a+a", false);
+//	test("b-c*(a*c-a)","b-c*(a*c-a)", false);
+//	test("a/c-(c*b/b)","a/c-c*b/b", false);
+//	test("c+a*(b/c/c)","c+a*b/c/c", false);
+
+  test("a+(b+c)/(d+((f+(k+m))+n))","a+(b+c)/(d+f+k+m+n)"    , false);
+  test("(a-b-c+(d+(((f/k+m))/n)))","a-b-c+d+(f/k+m)/n"      , false);
+  test("(a/b+(c-d)/(((f)-k))-m+n)","a/b+(c-d)/(f-k)-m+n"    , false);
+  test("a-(b+(c/d+f)-(k)/((m+n)))","a-(b+c/d+f-k/(m+n))"    , false);
+  test("a-(b+(c-((d/f)+(k)+m))+n)","a-(b+c-(d/f+k+m)+n)"    , false);
+  test("(a/b/(c-d)/((f/k))/(m)-n)","a/b/(c-d)/(f/k)/m-n"    , false);
+  test("(a+((b/c)/d+(f)+k/(m))/n)","a+(b/c/d+f+k/m)/n"      , false);
+  test("(((a+b+(c)/d)/(f)/k)/m)/n","(a+b+c/d)/f/k/m/n"      , true);
+//  test("a+b+c+(d-((f-(k))+(m+n)))","a+b+c+d-(f-k+m+n)"      , false);
+//  test("(a/(b+(c+((d)/f)/k))/m)-n","a/(b+c+d/f/k)/m-n"      , false);
+//  test("(a-b/(c/(d)/(f)-(k-m)/n))","a-b/(c/d/f-(k-m)/n)"    , false);
+//  test("a+((b/c+d))+f+(k/((m/n)))","a+b/c+d+f+k/(m/n)"      , false);
+//  test("a+b+c+(((d-f/(k/(m)))-n))","a+b+c+d-f/(k/m)-n"      , false);
+//  test("((a+b)-c-d-f+k)-(((m+n)))","a+b-c-d-f+k-(m+n)"      , false);
+//  test("(a+b+c)-(d-((f+(k))+m))+n","a+b+c-(d-(f+k+m))+n"    , false);
+//  test("(a+(b+(c)+(d-f)+k/(m)-n))","a+b+c+d-f+k/m-n"        , false);
+//  test("(a+((b/c/d-f+k)+((m))/n))","a+b/c/d-f+k+m/n"        , false);
+//  test("(a+b)/(((c/(d/f+k))+m-n))","(a+b)/(c/(d/f+k)+m-n)"  , false);
+//  test("a+(b+c)+d-f+(((k+(m)))+n)","a+b+c+d-f+k+m+n"        , false);
+//  test("a-b/((c+(d)/(f)+k+(m+n)))","a-b/(c+d/f+k+m+n)"      , false);
+//  test("(a+(b-(c+(d+(f/k))+m)/n))","a+b-(c+d+f/k+m)/n"      , false);
+//  test("((a-b+c)+d-((f-(k)+m)+n))","a-b+c+d-(f-k+m+n)"      , false);
+//  test("(a-((b-c+d))+(f-(k-m))/n)","a-(b-c+d)+(f-(k-m))/n"  , false);
+//  test("(a-(b+c)+d)/((f+k+(m)-n))","(a-(b+c)+d)/(f+k+m-n)"  , false);
+//  test("(a+b-(c+(d)-f)-(k/(m)/n))","a+b-(c+d-f)-k/m/n"      , false);
+//  test("(a+(b+c)-(d/((f)+k+m)-n))","a+b+c-(d/(f+k+m)-n)"    , false);
+//  test("a+b/(c+d/((f+(k))/(m+n)))","a+b/(c+d/((f+k)/(m+n)))", false);
+//  test("(a-b+((c/(d)+(f+k))+m)+n)","a-b+c/d+f+k+m+n"        , false);
+//  test("(a+b-((c+(d)+f)/(k/m)+n))","a+b-((c+d+f)/(k/m)+n)"  , false);
+//  test("a+b+c+(d-f-(((k)+(m))/n))","a+b+c+d-f-(k+m)/n"      , false);
+//  test("(a+(((b-(c)+d)+f)-k)+m+n)","a+b-c+d+f-k+m+n"        , false);
+//  test("a-b+c/(d+(f-k/(((m-n)))))","a-b+c/(d+f-k/(m-n))"    , false);
+//  test("a+((b+c+d+(f)+(k)+(m)+n))","a+b+c+d+f+k+m+n"        , false);
+//  test("a/b+c+(d+(f)/(k+((m)/n)))","a/b+c+d+f/(k+m/n)"      , false);
+//  test("(a+(b+(c/d+(f))+(k-m))+n)","a+b+c/d+f+k-m+n"        , false);
+//  test("(a-b+c-d)/((((f-k))-m+n))","(a-b+c-d)/(f-k-m+n)"    , false);
+//  test("a/(b-c+d+(f/(k+((m))+n)))","a/(b-c+d+f/(k+m+n))"    , false);
+//  test("a+((b-(c)+(d)+f)-k)+(m+n)","a+b-c+d+f-k+m+n"        , false);
+//  test("a+b-((c/(d/(f)/(k)))+m)/n","a+b-(c/(d/f/k)+m)/n"    , false);
+//  test("((a+b+(c+((d+f)))/k+m+n))","a+b+(c+d+f)/k+m+n"      , false);
+//  test("(a/b+((((c+d+f))/k+m)/n))","a/b+((c+d+f)/k+m)/n"    , false);
+//  test("a/(b-(c-(d+f-(k)/(m))/n))","a/(b-(c-(d+f-k/m)/n))"  , false);
+//  test("a+(((b+c-d+f)+k)+((m/n)))","a+b+c-d+f+k+m/n"        , false);
+//  test("(a-b+c-d-((f+(k-(m))+n)))","a-b+c-d-(f+k-m+n)"      , false);
+//  test("(((a+b)+c+(d/(f))/k)/m)+n","(a+b+c+d/f/k)/m+n"      , false);
+//  test("a/(b-(c+(d-f+(k)+(m)+n)))","a/(b-(c+d-f+k+m+n))"    , false);
+//  test("a+b-(c+(d-(f)+(k/(m)))+n)","a+b-(c+d-f+k/m+n)"      , false);
+//  test("(a+(b/((c+(d)/f)-k/m+n)))","a+b/(c+d/f-k/m+n)"      , false);
+//  test("(a-((b-c+d)+(f+k))+(m-n))","a-(b-c+d+f+k)+m-n"      , false);
+//  test("((a-b+(c+d+(f/(k+m)/n))))","a-b+c+d+f/(k+m)/n"      , false);
+
+
+
+
+
+
+	cout << endl << endl << "DONE" << endl;
+
+
+//		uint num_of_expr;
+//		std::cin >> num_of_expr;
+//		vector<string> unparsed(num_of_expr);
+//		for(uint i = 0; i < num_of_expr; i++)
+//		{
+//			std::cin >> unparsed[i];
+//			if(std::cin.eof()) break;
+//		}
+//		for(auto& unpr : unparsed)
+//			cout << remove_excess_brackets(unpr) << endl;
+//
+//		return(0);
 }
 
